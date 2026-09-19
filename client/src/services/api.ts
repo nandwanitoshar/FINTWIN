@@ -1,4 +1,49 @@
-const API_BASE = (import.meta as any).env?.VITE_API_URL || '/api';
+/**
+ * Normalizes the API base URL across environments.
+ * - In production (e.g. Vercel deployment), ensures requests target https://fintwin-7bta.onrender.com/api
+ *   even if VITE_API_URL has a trailing slash, lacks '/api', or is omitted.
+ * - In local development (Vite dev server), defaults to '/api' so requests are forwarded by Vite proxy to http://localhost:5000/api.
+ */
+export const getApiBase = (rawEnvUrl?: string, isProd?: boolean): string => {
+  const envUrl =
+    typeof rawEnvUrl === 'string'
+      ? rawEnvUrl.trim()
+      : (import.meta as any).env?.VITE_API_URL?.trim();
+
+  if (envUrl) {
+    // Strip trailing slashes
+    const sanitized = envUrl.replace(/\/+$/, '');
+    if (!sanitized) {
+      return '/api';
+    }
+    // Ensure base ends with /api
+    return sanitized.endsWith('/api') ? sanitized : `${sanitized}/api`;
+  }
+
+  const prod =
+    typeof isProd === 'boolean'
+      ? isProd
+      : Boolean((import.meta as any).env?.PROD);
+
+  if (prod) {
+    return 'https://fintwin-7bta.onrender.com/api';
+  }
+
+  return '/api';
+};
+
+export const API_BASE = getApiBase();
+
+/**
+ * Constructs a fully normalized API URL without double slashes or duplicate /api prefix.
+ */
+export const buildApiUrl = (endpoint: string, base: string = API_BASE): string => {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const route = cleanEndpoint.startsWith('/api/')
+    ? cleanEndpoint.slice(4)
+    : cleanEndpoint;
+  return `${base}${route}`;
+};
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -43,7 +88,7 @@ export async function request<T = any>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const url = `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const url = buildApiUrl(endpoint);
 
   try {
     const res = await fetch(url, {
